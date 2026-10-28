@@ -1,0 +1,12 @@
+[Игровые чаты]
+https://t.me/example_game_chat
+@another_game_chat
+
+[Игровые каналы]
+t.me/example_game_channel
+
+[Крипто каналы]
+https://t.me/example_ton_channel
+
+[Крипто чаты]
+@example_ton_chat
