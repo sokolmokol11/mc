@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Крипто-симулятор</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+  :root { --bg:#0e1117; --panel:#161b24; --panel2:#121721; --line:#262d3a; --text:#e6e9ef; --muted:#8b93a5;
+          --up:#22c55e; --down:#ef4444; --accent:#f7a600; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 system-ui,Segoe UI,Roboto,sans-serif; }
+  .wrap { max-width:1240px; margin:0 auto; padding:20px 16px 60px; }
+  h1 { font-size:22px; margin:0; } h2 { font-size:16px; margin:28px 0 10px; color:var(--muted); font-weight:600; }
+  h3 { font-size:14px; margin:0 0 8px; color:var(--muted); font-weight:600; }
+  .head { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+  .status { color:var(--muted); font-size:13px; } .status b { color:var(--text); }
+  .err { background:#3b1d1d; border:1px solid #7f1d1d; padding:10px 14px; border-radius:8px; margin-top:12px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { padding:8px 10px; text-align:left; border-bottom:1px solid var(--line); white-space:nowrap; vertical-align:top; }
+  th { color:var(--muted); font-weight:500; font-size:12px; }
+  td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  tr.click { cursor:pointer; } tr.click:hover { background:#1c2330; }
+  tr.group td { background:var(--panel2); color:var(--muted); font-size:12px; font-weight:600; letter-spacing:.03em; }
+  .up { color:var(--up); } .down { color:var(--down); } .mut { color:var(--muted); }
+  .tag { font-size:12px; color:var(--muted); }
+  .detail > td { white-space:normal; background:var(--panel2); padding:14px 16px; }
+  .desc { color:#c3c9d6; margin-bottom:10px; max-width:900px; }
+  .rules td { border:0; padding:3px 12px 3px 0; white-space:normal; font-size:13px; }
+  .rules td:first-child { color:var(--muted); width:220px; }
+  .stats { display:flex; flex-wrap:wrap; gap:8px; margin:10px 0; }
+  .stat { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:6px 10px; font-size:13px; }
+  .stat span { color:var(--muted); font-size:11px; display:block; }
+  .pos { border:1px solid var(--line); border-radius:8px; padding:8px 10px; margin:6px 0; font-size:13px; cursor:pointer; background:var(--panel); }
+  .pos:hover { border-color:var(--accent); }
+  .chartbox { padding:14px; height:380px; }
+  .scroll { overflow-x:auto; }
+  .tablebox { max-height:520px; overflow:auto; }
+  select, .btn { background:var(--panel); color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 10px; font:inherit; font-size:13px; }
+  .btn { cursor:pointer; text-decoration:none; display:inline-block; } .btn:hover { border-color:var(--accent); }
+  .btn.primary { background:#3a2c00; border-color:var(--accent); }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .journal { font:12px/1.5 Consolas,monospace; padding:12px; max-height:320px; overflow:auto; white-space:pre-wrap; color:#c3c9d6; }
+  .lev { display:inline-block; font-size:11px; padding:1px 6px; border-radius:4px; background:#262d3a; color:var(--text); margin-left:6px; }
+  .lev.hi { background:#7c2d12; } .lev.ctl { background:#1e293b; color:var(--muted); }
+  .act { font-size:12px; padding:1px 7px; border-radius:4px; white-space:nowrap; }
+  .act.enter { background:#14532d; } .act.exit { background:#3f3f46; } .act.skip { background:#262d3a; color:var(--muted); } .act.info { background:#1e3a5f; }
+  /* окно сделки */
+  .modal { position:fixed; inset:0; background:rgba(0,0,0,.7); display:flex; align-items:flex-start; justify-content:center;
+           overflow:auto; padding:24px 12px; z-index:10; }
+  .modal.hidden { display:none; }
+  .box { background:var(--panel); border:1px solid var(--line); border-radius:12px; width:100%; max-width:1140px; padding:18px; }
+  .boxhead { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:10px; }
+  .boxhead h2 { margin:0; color:var(--text); font-size:18px; }
+  .x { background:none; border:1px solid var(--line); color:var(--text); border-radius:6px; padding:4px 10px; cursor:pointer; font-size:16px; }
+  #tchart { height:520px; border:1px solid var(--line); border-radius:8px; position:relative; }
+  .legend { display:flex; flex-wrap:wrap; gap:14px; font-size:12px; color:var(--muted); margin:8px 0 14px; }
+  .legend i { display:inline-block; width:14px; height:3px; vertical-align:middle; margin-right:5px; border-radius:2px; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:12px; }
+  .card { background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+  .card table td { border:0; padding:3px 0; white-space:normal; }
+  .card table td:first-child { color:var(--muted); padding-right:12px; }
+  .big { font-size:15px; margin-bottom:8px; }
+  .loading { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--muted); padding:20px; text-align:center; }
+  .toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#14532d; padding:8px 16px; border-radius:8px; z-index:20; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>🚀 Крипто-симулятор ботов</h1>
+    <div class="row">
+      <span class="status" id="status">загрузка…</span>
+      <select id="rdays"><option value="1">за сутки</option><option value="7" selected>за 7 дней</option><option value="30">за 30 дней</option></select>
+      <a class="btn primary" id="rlink" href="/api/report?days=7">📄 Скачать отчёт</a>
+    </div>
+  </div>
+  <div class="tag" style="margin-top:6px">Отчёт — файл .md со всеми сделками, метриками и причинами пропусков. Его можно прислать Claude в чат для разбора стратегии.</div>
+  <div id="err"></div>
+
+  <h2>Рейтинг ботов (у каждого было $1000) — нажми на бота: правила, статистика, открытые сделки</h2>
+  <div class="panel scroll"><table id="board"></table></div>
+
+  <h2>Баланс ботов во времени</h2>
+  <div class="panel chartbox"><canvas id="chart"></canvas></div>
+
+  <h2 class="row" style="justify-content:space-between">
+    <span>Закрытые сделки — нажми на сделку, чтобы увидеть её на графике</span>
+    <select id="filter"><option value="">все боты</option></select>
+  </h2>
+  <div class="panel scroll tablebox"><table id="trades"></table></div>
+
+  <h2 class="row" style="justify-content:space-between">
+    <span>Журнал решений — что бот увидел и почему вошёл или пропустил (нажми — откроется график)</span>
+    <span class="row">
+      <select id="dbot"><option value="">все боты</option></select>
+      <select id="dact"><option value="">все решения</option><option value="enter">входы</option><option value="skip">пропуски</option>
+        <option value="exit">выходы</option><option value="info">пересчёты</option></select>
+    </span>
+  </h2>
+  <div class="panel scroll tablebox"><table id="decisions"></table></div>
+
+  <h2>Журнал событий</h2>
+  <div class="panel journal" id="journal"></div>
+</div>
+
+<div class="modal hidden" id="modal" onclick="if(event.target===this)closeModal()">
+  <div class="box">
+    <div class="boxhead">
+      <div><h2 id="mtitle"></h2><div class="tag" id="msub"></div></div>
+      <div class="row">
+        <button class="btn" onclick="copyItem()">📋 Скопировать для обсуждения</button>
+        <button class="x" onclick="closeModal()">✕</button>
+      </div>
+    </div>
+    <div id="tchart"></div>
+    <div class="legend" id="mlegend"></div>
+    <div class="cards">
+      <div class="card"><h3 id="mwhyhead">Почему бот вошёл</h3><div id="mwhy"></div></div>
+      <div class="card"><h3 id="mreshead">Чем закончилось</h3><div id="mresult"></div></div>
+      <div class="card"><h3>Параметры</h3><div id="mparams"></div></div>
+    </div>
+    <div class="card" style="margin-top:12px"><h3 id="mruleshead">Правила стратегии</h3><div id="mrules"></div></div>
+  </div>
+</div>
+
+<script>
+const fmt = (x, d=2) => x == null ? "—" : Number(x).toLocaleString("ru-RU", {minimumFractionDigits:d, maximumFractionDigits:d});
+const px = x => x == null ? "—" : String(+Number(x).toPrecision(6));
+const cls = x => x > 0 ? "up" : x < 0 ? "down" : "mut";
+const sign = x => x == null ? "—" : (x > 0 ? "+" : "") + fmt(x);
+const dt = ts => new Date(ts * 1000).toLocaleString("ru-RU", {day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit"});
+const dur = s => { s = Math.max(0, s|0); const d = s/86400|0, h = s%86400/3600|0, m = s%3600/60|0;
+  return (d ? d+"д " : "") + (h ? h+"ч " : "") + m + "м"; };
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const side = (s, m) => s === "long" ? (m === "spot" ? "🟢 спот" : "🟢 лонг") : "🔴 шорт";
+const IV = {"1":60,"3":180,"5":300,"15":900,"30":1800,"60":3600,"120":7200,"240":14400,"D":86400};
+const IVNAME = {"1":"1 мин","3":"3 мин","5":"5 мин","15":"15 мин","30":"30 мин","60":"1 час","120":"2 часа","240":"4 часа","D":"1 день"};
+const ACT = {enter:"вход", skip:"пропуск", exit:"выход", info:"пересчёт"};
+const COLORS = ["#f7a600","#3b82f6","#22c55e","#ef4444","#a855f7","#14b8a6","#ec4899","#eab308","#64748b","#f97316","#06b6d4","#84cc16"];
+const visible = d => Object.entries(d || {}).filter(([k]) => !k.startsWith("_"));
+let open = new Set(), bots = {}, colorOf = {}, chart, items = {}, lastNow = Date.now()/1000, current = null;
+
+function rulesTable(b) {
+  const rows = Object.entries(b.rules || {}).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("");
+  return `<table class="rules">
+    <tr><td>Плечо</td><td><b>${b.lev}x</b> ${b.lev > 1 ? `— залог в ${b.lev} раза меньше позиции, ликвидация при движении ~${fmt(100/b.lev,0)}% против` : "— без плеча"}</td></tr>
+    <tr><td>Монеты</td><td>${esc(b.symbols_text)}</td></tr>${rows}</table>`;
+}
+
+function statBox(label, value, c = "") { return `<div class="stat"><span>${label}</span><b class="${c}">${value}</b></div>`; }
+
+function posCard(p) {
+  const id = "p:" + p.bot + ":" + p.key; items[id] = {...p, kind: "open"};
+  return `<div class="pos" onclick="openItem('${esc(id)}')">${side(p.side, p.market)} <b>${p.symbol}</b>
+    залог $${fmt(p.margin,0)}${p.market === "spot" ? "" : " × " + p.lev + "x"} · вход ${px(p.entry)} → сейчас ${px(p.price)} ·
+    <span class="${cls(p.pnl)}">${sign(p.pnl)}$ (${sign(p.pnl_pct)}%)</span> · ${dur(lastNow - p.opened_at)} · 📈 график
+    <div class="tag">${esc(p.reason_open)}</div></div>`;
+}
+
+async function loadSummary() {
+  const s = await (await fetch("/api/summary")).json();
+  lastNow = s.now;
+  document.getElementById("status").innerHTML = s.mode ? `<b>📼 ${esc(s.mode)}</b> (${dur(s.now - s.started)} истории)` :
+    `работает <b>${dur(s.now - s.started)}</b> · обновлено ${new Date().toLocaleTimeString("ru-RU")}`;
+  document.getElementById("err").innerHTML = s.error ? `<div class="err">⚠ Нет связи с Bybit: ${esc(s.error)}</div>` : "";
+  let html = `<tr><th>#</th><th>Бот</th><th>Свечи</th><th class="num">Баланс</th><th class="num">Итог</th><th class="num">Сделок</th>
+              <th class="num">Прибыльных</th><th class="num">Профит-фактор</th><th class="num">Макс. просадка</th><th class="num">Открыто</th></tr>`;
+  const groups = [["ОСНОВНЫЕ СТРАТЕГИИ", s.bots.filter(b => !b.control)], ["КОНТРОЛЬНАЯ ГРУППА — для сравнения", s.bots.filter(b => b.control)]];
+  for (const [gname, list] of groups) {
+    if (!list.length) continue;
+    html += `<tr class="group"><td colspan="10">${gname}</td></tr>`;
+    list.forEach((b, i) => {
+      if (!(b.name in bots)) ["filter", "dbot"].forEach(id => document.getElementById(id).add(new Option(b.title, b.name)));
+      bots[b.name] = b;
+      html += `<tr class="click" onclick="toggle('${b.name}')">
+        <td>${i + 1}</td><td><b>${esc(b.title)}</b><span class="lev ${b.lev > 1 ? "hi" : ""}">${b.lev}x</span></td>
+        <td class="tag">${esc(b.timeframe)}</td>
+        <td class="num">$${fmt(b.equity)}</td><td class="num ${cls(b.pnl_pct)}">${sign(b.pnl_pct)}%</td>
+        <td class="num">${b.trades}</td><td class="num">${b.winrate == null ? "—" : fmt(b.winrate, 0) + "%"}</td>
+        <td class="num ${b.profit_factor == null ? "" : b.profit_factor >= 1 ? "up" : "down"}">${fmt(b.profit_factor)}</td>
+        <td class="num">${fmt(b.max_dd, 1)}%</td><td class="num">${b.positions.length}</td></tr>`;
+      if (open.has(b.name)) {
+        html += `<tr class="detail"><td></td><td colspan="9"><div class="desc">${esc(b.description)}</div>
+          <div class="stats">${statBox("Средняя прибыль", sign(b.avg_win) + "$", "up")}${statBox("Средний убыток", sign(b.avg_loss) + "$", "down")}
+          ${statBox("В среднем за сделку", sign(b.expectancy) + "$", cls(b.expectancy))}${statBox("Средняя длительность", b.avg_hold_h == null ? "—" : fmt(b.avg_hold_h, 1) + " ч")}</div>
+          ${rulesTable(b)}
+          <div class="row" style="margin-top:12px"><h3 style="margin:0">Открытые сделки</h3>
+          <a class="btn" href="/api/report?days=30&bot=${b.name}">📄 Отчёт по этому боту за 30 дней</a></div>
+          ${b.positions.length ? b.positions.map(posCard).join("") : `<div class="mut" style="margin-top:6px">сейчас без позиций</div>`}</td></tr>`;
+      }
+    });
+  }
+  document.getElementById("board").innerHTML = html;
+  document.getElementById("journal").textContent = s.journal.join("\n") || "пока пусто";
+}
+
+function toggle(name) { open.has(name) ? open.delete(name) : open.add(name); loadSummary(); }
+
+async function loadEquity() {
+  const data = await (await fetch("/api/equity")).json();
+  const names = Object.keys(data).filter(n => bots[n]);
+  names.forEach(n => colorOf[n] = colorOf[n] || COLORS[Object.keys(colorOf).length % COLORS.length]);
+  const datasets = names.map(n => ({
+    label: bots[n].title, data: data[n].map(([t, e]) => ({x: t * 1000, y: e})),
+    borderColor: colorOf[n], backgroundColor: colorOf[n], borderWidth: bots[n].control ? 1 : 2,
+    borderDash: bots[n].control ? [4, 4] : [], pointRadius: 0, tension: 0.15 }));
+  if (!window.Chart) return;
+  if (!chart) {
+    chart = new Chart(document.getElementById("chart"), {
+      type: "line", data: {datasets},
+      options: { animation:false, maintainAspectRatio:false, interaction:{mode:"nearest", intersect:false},
+        scales: {
+          x: { type:"linear", ticks:{color:"#8b93a5", maxTicksLimit:8,
+               callback: v => new Date(v).toLocaleString("ru-RU",{day:"2-digit",month:"2-digit",hour:"2-digit",minute:"2-digit"})},
+               grid:{color:"#262d3a"} },
+          y: { ticks:{color:"#8b93a5", callback: v => "$" + v}, grid:{color:"#262d3a"} } },
+        plugins: { legend:{labels:{color:"#e6e9ef", boxWidth:12}},
+          tooltip:{callbacks:{title: i => new Date(i[0].parsed.x).toLocaleString("ru-RU"),
+                              label: i => `${i.dataset.label}: $${fmt(i.parsed.y)}`}} } } });
+  } else { chart.data.datasets = datasets; chart.update(); }
+}
+
+async function loadTrades() {
+  const bot = document.getElementById("filter").value;
+  const t = await (await fetch("/api/trades" + (bot ? "?bot=" + bot : ""))).json();
+  let html = `<tr><th>Закрыта</th><th>Бот</th><th>Монета</th><th>Сторона</th><th class="num">Плечо</th><th class="num">Вход</th>
+              <th class="num">Выход</th><th class="num">Прибыль</th><th>Длилась</th><th>Почему вошёл → почему вышел</th><th></th></tr>`;
+  if (!t.length) html += `<tr><td colspan="11" class="mut">Сделок пока нет. Боты ждут своих сигналов — что они видят, смотри в журнале решений.</td></tr>`;
+  t.forEach(r => {
+    const id = "t:" + r.id; items[id] = {...r, kind: "trade"};
+    html += `<tr class="click" onclick="openItem('${id}')"><td>${dt(r.closed_at)}</td><td>${esc(bots[r.bot] ? bots[r.bot].title : r.bot)}</td>
+    <td><b>${r.symbol}</b></td><td>${side(r.side, r.market)}</td><td class="num">${r.market === "spot" ? "спот" : (r.lev || 1) + "x"}</td>
+    <td class="num">${px(r.entry)}</td><td class="num">${px(r.exit)}</td>
+    <td class="num ${cls(r.pnl)}">${sign(r.pnl)}$ (${sign(r.pnl_pct)}%)</td><td>${dur(r.closed_at - r.opened_at)}</td>
+    <td class="tag" style="white-space:normal;min-width:260px">${esc(r.reason_open)} → ${esc(r.reason_close)}</td><td>📈</td></tr>`;
+  });
+  document.getElementById("trades").innerHTML = html;
+}
+
+async function loadDecisions() {
+  const bot = document.getElementById("dbot").value, act = document.getElementById("dact").value;
+  const q = new URLSearchParams({limit: 300}); if (bot) q.set("bot", bot); if (act) q.set("action", act);
+  const rows = await (await fetch("/api/decisions?" + q)).json();
+  let html = `<tr><th>Время</th><th>Бот</th><th>Монета</th><th>Решение</th><th>Причина</th></tr>`;
+  if (!rows.length) html += `<tr><td colspan="5" class="mut">Пока пусто. Пропуски пишутся, только когда причина меняется, — так журнал не забивается одинаковыми строками.</td></tr>`;
+  rows.forEach(r => {
+    const id = "d:" + r.id; items[id] = {...r, kind: "decision"};
+    html += `<tr class="click" onclick="openItem('${id}')"><td>${dt(r.ts)}</td><td>${esc(bots[r.bot] ? bots[r.bot].title : r.bot)}</td>
+      <td><b>${esc(r.symbol)}</b></td><td><span class="act ${r.action}">${ACT[r.action] || r.action}</span></td>
+      <td class="tag" style="white-space:normal;min-width:300px">${esc(r.reason)}</td></tr>`;
+  });
+  document.getElementById("decisions").innerHTML = html;
+}
+
+/* ---------- окно: сделка или решение на графике ---------- */
+let tchart = null;
+const TZ = -new Date().getTimezoneOffset() * 60;   // время Bybit в UTC → переводим в местное
+
+function closeModal() {
+  document.getElementById("modal").classList.add("hidden");
+  if (tchart) { tchart.remove(); tchart = null; }
+}
+
+function kv(obj) {
+  return `<table>${Object.entries(obj).filter(([, v]) => v != null && v !== "").map(([k, v]) =>
+    `<tr><td>${esc(k)}</td><td>${v}</td></tr>`).join("")}</table>`;
+}
+const kvDetails = d => visible(d).length ? kv(Object.fromEntries(visible(d).map(([k, v]) => [k, esc(v)]))) : "";
+
+function openItem(id) {
+  const t = items[id]; if (!t) return;
+  current = t;
+  const b = bots[t.bot] || {title: t.bot, rules: {}, lev: t.lev || 1, symbols_text: ""};
+  document.getElementById("modal").classList.remove("hidden");
+  document.getElementById("mruleshead").textContent = `Правила стратегии «${b.title}»`;
+  document.getElementById("mrules").innerHTML = b.rules ? rulesTable(b) : "";
+  if (t.kind === "decision") return openDecision(t, b);
+
+  const isOpen = t.kind === "open", end = isOpen ? lastNow : t.closed_at, lev = t.lev || 1, spot = t.market === "spot";
+  document.getElementById("mtitle").innerHTML = `${side(t.side, t.market)} ${t.symbol} — ${esc(b.title)} ${isOpen ? '<span class="lev">открыта</span>' : ""}`;
+  document.getElementById("msub").textContent = `${dt(t.opened_at)} → ${isOpen ? "сейчас" : dt(t.closed_at)} · длится ${dur(end - t.opened_at)}`;
+  document.getElementById("mwhyhead").textContent = "Почему бот вошёл";
+  document.getElementById("mreshead").textContent = "Чем закончилось";
+  document.getElementById("mwhy").innerHTML = `<div class="big">${esc(t.reason_open)}</div>` +
+    (visible(t.details).length ? `<div class="tag" style="margin-bottom:4px">Метрики на момент входа:</div>` + kvDetails(t.details)
+      : `<div class="tag">подробности не сохранены</div>`);
+  document.getElementById("mresult").innerHTML = isOpen
+    ? `<div class="big">Сделка ещё открыта</div>` + kv({"Цена сейчас": px(t.price),
+        "Прибыль сейчас": `<span class="${cls(t.pnl)}">${sign(t.pnl)}$ (${sign(t.pnl_pct)}% от залога)</span>`,
+        "Стоп сейчас": px(t.stop), "Тейк сейчас": px(t.tp)})
+    : `<div class="big">${esc(t.reason_close)}</div>` + kv({"Цена выхода": px(t.exit),
+        "Итог": `<span class="${cls(t.pnl)}"><b>${sign(t.pnl)}$ (${sign(t.pnl_pct)}% от залога)</b></span>`,
+        "Комиссии": fmt(t.fees) + "$", "Фандинг": sign(t.funding || 0) + "$",
+        "Стоп в конце": t.last_stop != null && t.last_stop !== t.stop ? px(t.last_stop) + " (был передвинут)" : null});
+  const stop0 = isOpen ? t.first_stop : t.stop, tp0 = isOpen ? t.first_tp : t.tp;
+  const riskPct = stop0 ? Math.abs(stop0 / t.entry - 1) * 100 : null;
+  const liq = t.side === "long" ? t.entry * (1 - 1/lev + 0.005) : t.entry * (1 + 1/lev - 0.005);
+  document.getElementById("mparams").innerHTML = kv({
+    "Рынок": spot ? "спот (без плеча и фандинга)" : "фьючерс", "Плечо": spot ? null : `<b>${lev}x</b>`,
+    "Залог (свои деньги)": t.margin != null ? "$" + fmt(t.margin) : null,
+    "Размер позиции": t.margin != null ? "$" + fmt(t.margin * (spot ? 1 : lev)) : null, "Цена входа": px(t.entry),
+    "Стоп-лосс": stop0 ? `${px(stop0)} (${fmt(riskPct,1)}% от входа)` : "нет",
+    "Тейк-профит": tp0 ? `${px(tp0)} (${fmt(Math.abs(tp0 / t.entry - 1) * 100,1)}% от входа)` : "нет",
+    "Ликвидация": !spot && lev > 1 ? px(liq) : null, "Свечи бота": IVNAME[t.interval] || "—"});
+
+  const iv = t.interval || "15", sec = IV[iv] || 900, mk = [];
+  mk.push({time: t.opened_at, position: t.side === "long" ? "belowBar" : "aboveBar", color: t.side === "long" ? "#22c55e" : "#ef4444",
+           shape: t.side === "long" ? "arrowUp" : "arrowDown", text: `ВХОД ${px(t.entry)}`});
+  if (!isOpen) mk.push({time: t.closed_at, position: t.side === "long" ? "aboveBar" : "belowBar",
+           color: t.pnl >= 0 ? "#22c55e" : "#ef4444", shape: "circle", text: `ВЫХОД ${sign(t.pnl_pct)}%`});
+  const lines = [[t.entry, "#e6e9ef", "вход", 1], [stop0, "#ef4444", "стоп", 2], [tp0, "#22c55e", "тейк", 2]];
+  if (!isOpen && t.last_stop && t.last_stop !== t.stop) lines.push([t.last_stop, "#f97316", "стоп в конце", 2]);
+  if (isOpen && t.stop && t.stop !== stop0) lines.push([t.stop, "#f97316", "стоп сейчас", 2]);
+  if (!isOpen) lines.push([t.exit, t.pnl >= 0 ? "#22c55e" : "#ef4444", "выход", 0]);
+  if (!spot && lev > 1) lines.push([liq, "#7f1d1d", "ликвидация", 2]);
+  rangeLines(t.details, lines);
+  drawChart({bot: t.bot, symbol: t.symbol, iv, from: t.opened_at - 90 * sec, to: Math.min(end + 40 * sec, lastNow),
+             anchor: (t.details || {})._anchor, markers: mk, lines, focus: [t.opened_at, end]});
+}
+
+function rangeLines(d, lines) {
+  if (d && d._range_lo) { lines.push([d._range_lo, "#22c55e", "дно боковика", 2]); lines.push([d._range_hi, "#64748b", "верх боковика", 2]); }
+}
+
+function openDecision(t, b) {
+  const label = ACT[t.action] || t.action;
+  document.getElementById("mtitle").innerHTML = `<span class="act ${t.action}">${label}</span> ${esc(t.symbol)} — ${esc(b.title)}`;
+  document.getElementById("msub").textContent = dt(t.ts);
+  document.getElementById("mwhyhead").textContent = "Решение бота";
+  document.getElementById("mreshead").textContent = "Что дальше";
+  document.getElementById("mwhy").innerHTML = `<div class="big">${esc(t.reason)}</div>`;
+  document.getElementById("mresult").innerHTML = t.action === "skip"
+    ? `<div class="tag">Бот видел эту монету, но не вошёл. Посмотри на график справа от отметки: если цена потом пошла так, как ждала стратегия, — возможно, фильтр слишком строгий. Это и есть материал для доработки.</div>`
+    : t.action === "enter" ? `<div class="tag">Сделка открыта — полный разбор в таблице «Закрытые сделки» или в открытых позициях бота.</div>`
+    : t.action === "exit" ? `<div class="tag">Позиция закрыта.</div>` : `<div class="tag">Плановый пересчёт стратегии.</div>`;
+  document.getElementById("mparams").innerHTML = (visible(t.details).length ? `<div class="tag" style="margin-bottom:4px">Метрики в момент решения:</div>` : "") + kvDetails(t.details);
+  const iv = t.interval || "15", sec = IV[iv] || 900;
+  const colors = {enter: "#22c55e", skip: "#8b93a5", exit: "#f7a600", info: "#3b82f6"};
+  const lines = []; rangeLines(t.details, lines);
+  drawChart({bot: t.bot, symbol: t.symbol, iv, from: t.ts - 100 * sec, to: Math.min(t.ts + 60 * sec, lastNow),
+             anchor: (t.details || {})._anchor, lines, focus: [t.ts, t.ts],
+             markers: [{time: t.ts, position: "aboveBar", color: colors[t.action] || "#8b93a5", shape: "arrowDown", text: label.toUpperCase()}]});
+}
+
+async function drawChart(o) {
+  const box = document.getElementById("tchart");
+  if (tchart) { tchart.remove(); tchart = null; }
+  document.getElementById("mlegend").innerHTML = "";
+  box.innerHTML = `<div class="loading">загружаю свечи с Bybit…</div>`;
+  if (!window.LightweightCharts) { box.innerHTML = `<div class="loading">библиотека графиков не загрузилась — проверь интернет</div>`; return; }
+  let data;
+  try {
+    const q = new URLSearchParams({bot: o.bot, symbol: o.symbol, interval: o.iv, from: o.from, to: o.to});
+    if (o.anchor) q.set("anchor", o.anchor);
+    data = await (await fetch("/api/chart?" + q)).json();
+    if (data.error) throw new Error(data.error);
+  } catch (e) { box.innerHTML = `<div class="loading">не удалось загрузить свечи: ${esc(e.message)}</div>`; return; }
+  if (!data.candles.length) { box.innerHTML = `<div class="loading">свечей нет (монету могли убрать с биржи)</div>`; return; }
+  box.innerHTML = "";
+  const panes = ["ind", "oi"].filter(p => data.overlays.some(x => x.pane === p));
+  const mainBottom = panes.length === 2 ? 0.45 : panes.length === 1 ? 0.32 : 0.18;
+  tchart = LightweightCharts.createChart(box, {
+    autoSize: true, layout: {background: {color: "#121721"}, textColor: "#8b93a5"},
+    grid: {vertLines: {color: "#1e2533"}, horzLines: {color: "#1e2533"}},
+    timeScale: {timeVisible: true, borderColor: "#262d3a"}, rightPriceScale: {borderColor: "#262d3a"}, crosshair: {mode: 0}});
+  const T = x => x + TZ;
+  const cs = tchart.addCandlestickSeries({upColor: "#22c55e", downColor: "#ef4444", borderVisible: false, wickUpColor: "#22c55e", wickDownColor: "#ef4444"});
+  cs.priceScale().applyOptions({scaleMargins: {top: 0.04, bottom: mainBottom}});
+  cs.setData(data.candles.map(c => ({time: T(c.time), open: c.open, high: c.high, low: c.low, close: c.close})));
+  const vol = tchart.addHistogramSeries({priceScaleId: "vol", priceFormat: {type: "volume"}, lastValueVisible: false, priceLineVisible: false});
+  tchart.priceScale("vol").applyOptions({scaleMargins: {top: 1 - mainBottom - 0.12, bottom: mainBottom}});
+  vol.setData(data.candles.map(c => ({time: T(c.time), value: c.volume, color: c.close >= c.open ? "#22c55e44" : "#ef444444"})));
+  let legend = `<span><i style="background:#22c55e66"></i>объём</span>`;
+  data.overlays.forEach(ov => {
+    const opts = {color: ov.color, lineWidth: ov.width, priceLineVisible: false, lastValueVisible: ov.pane !== "main",
+                  crosshairMarkerVisible: false, ...(ov.pane !== "main" ? {priceScaleId: ov.pane} : {})};
+    const s = ov.type === "hist" ? tchart.addHistogramSeries({...opts, color: ov.color + "88"}) : tchart.addLineSeries(opts);
+    s.setData(ov.data.map(p => p.value == null ? {time: T(p.time)} : {time: T(p.time), value: p.value}));
+    if (ov.label === "RSI 14") [70, 30].forEach(v => s.createPriceLine({price: v, color: "#64748b", lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: ""}));
+    legend += `<span><i style="background:${ov.color}"></i>${esc(ov.label)}${ov.pane !== "main" ? " (нижняя панель)" : ""}</span>`;
+  });
+  // нижние панели: RSI/MACD и открытый интерес
+  const paneH = (mainBottom - 0.03) / Math.max(1, panes.length);
+  panes.forEach((p, i) => {
+    const top = 1 - mainBottom + 0.03 + i * paneH;
+    tchart.priceScale(p).applyOptions({scaleMargins: {top, bottom: Math.max(0, 1 - top - paneH + 0.02)}});
+  });
+  const ivSec = IV[data.interval] || IV[o.iv], snap = x => T(Math.floor(x / ivSec) * ivSec);
+  const mk = (o.markers || []).map(m => ({...m, time: snap(m.time)})).sort((a, b) => a.time - b.time);
+  cs.setMarkers(mk);
+  (o.lines || []).forEach(([price, color, title, style]) => price && cs.createPriceLine({price, color, lineWidth: 1, lineStyle: style, axisLabelVisible: true, title}));
+  if (!data.candles.some(c => c.volume)) vol.applyOptions({visible: false});
+  legend += `<span>свечи: ${IVNAME[data.interval]}${data.interval !== o.iv ? " (длинный период — укрупнил)" : ""}</span>`;
+  document.getElementById("mlegend").innerHTML = legend;
+  tchart.timeScale().setVisibleRange({from: snap(o.focus[0]) - 60 * ivSec, to: snap(o.focus[1]) + 30 * ivSec});
+}
+
+function copyItem() {
+  const t = current; if (!t) return;
+  const b = bots[t.bot] || {title: t.bot};
+  const det = visible(t.details).map(([k, v]) => `  - ${k}: ${v}`).join("\n");
+  let txt;
+  if (t.kind === "decision") {
+    txt = `Решение бота «${b.title}» (${t.bot}) по ${t.symbol}, ${dt(t.ts)}\nДействие: ${ACT[t.action] || t.action}\nПричина: ${t.reason}\nМетрики:\n${det}`;
+  } else {
+    const isOpen = t.kind === "open";
+    txt = `Сделка бота «${b.title}» (${t.bot}): ${t.side === "long" ? (t.market === "spot" ? "спот-покупка" : "лонг") : "шорт"} ${t.symbol}\n` +
+      `Открыта: ${dt(t.opened_at)}, вход ${px(t.entry)}, плечо ${t.lev || 1}x, залог $${fmt(t.margin)}\n` +
+      `Стоп: ${px(isOpen ? t.first_stop : t.stop)}, тейк: ${px(isOpen ? t.first_tp : t.tp)}\n` +
+      `Почему вошёл: ${t.reason_open}\nМетрики при входе:\n${det}\n` +
+      (isOpen ? `Сейчас: цена ${px(t.price)}, ${sign(t.pnl)}$ (${sign(t.pnl_pct)}%)`
+              : `Закрыта: ${dt(t.closed_at)}, выход ${px(t.exit)}, ${sign(t.pnl)}$ (${sign(t.pnl_pct)}% от залога)\nПочему вышел: ${t.reason_close}\nДлилась: ${dur(t.closed_at - t.opened_at)}`);
+  }
+  const done = () => { const d = document.createElement("div"); d.className = "toast"; d.textContent = "Скопировано — вставь в чат с Claude";
+                       document.body.appendChild(d); setTimeout(() => d.remove(), 2200); };
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(txt).then(done);
+  else { const ta = document.createElement("textarea"); ta.value = txt; document.body.appendChild(ta); ta.select();
+         try { document.execCommand("copy"); done(); } catch (e) { prompt("Скопируй текст:", txt); } ta.remove(); }
+}
+
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeModal(); });
+document.getElementById("filter").onchange = loadTrades;
+document.getElementById("dbot").onchange = loadDecisions;
+document.getElementById("dact").onchange = loadDecisions;
+document.getElementById("rdays").onchange = e => document.getElementById("rlink").href = "/api/report?days=" + e.target.value;
+async function refresh() {
+  try { await loadSummary(); await loadEquity(); await loadTrades(); await loadDecisions(); }
+  catch (e) { document.getElementById("status").textContent = "программа не запущена или недоступна"; }
+}
+refresh(); setInterval(refresh, 30000);
+</script>
+</body>
+</html>
