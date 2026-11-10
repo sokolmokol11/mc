@@ -5,6 +5,7 @@
     python3.11 backtest.py --days 90       # последние 90 дней (до 90)
     python3.11 backtest.py --serve         # после прогона открыть страницу с результатами на порту 8001
     python3.11 backtest.py --fresh         # скачать историю заново (иначе берётся кэш, если ему меньше 12 часов)
+    python3.11 backtest.py --bots pumps    # только шортисты пампов (v1 и v2) — быстрее
 
 Результаты: страница (с --serve), файл отчёта data/backtest_report_*.md и база data/backtest.db.
 Живой симулятор при этом продолжает работать — бэктест его не трогает.
@@ -45,7 +46,7 @@ def log(msg):
     print(time.strftime("%H:%M:%S"), msg, flush=True)
 
 
-def run(live, days=30, fresh=False, db_path="data/backtest.db", cache_dir="data/history", quiet_progress=False):
+def run(live, days=30, fresh=False, db_path="data/backtest.db", cache_dir="data/history", quiet_progress=False, bots=None):
     data = download(live, days, log, cache_dir, fresh)
     start, end = data["start"], data["end"]
     clock = [start / 1000]
@@ -54,7 +55,8 @@ def run(live, days=30, fresh=False, db_path="data/backtest.db", cache_dir="data/
         if os.path.exists(db_path + suffix):
             os.remove(db_path + suffix)
     storage = Storage(db_path, fast=True)
-    engine = Engine(client, storage, ALL_BOTS, now_fn=lambda: clock[0], quiet=True)
+    chosen = [b for b in ALL_BOTS if not bots or b.name in bots]
+    engine = Engine(client, storage, chosen, now_fn=lambda: clock[0], quiet=True)
     engine.started = start / 1000
     engine.mode = f"бэктест {time.strftime('%d.%m', time.localtime(start / 1000))}–" \
                   f"{time.strftime('%d.%m.%Y', time.localtime(end / 1000))}"
@@ -86,8 +88,10 @@ def print_results(engine, days):
     print("═" * 92)
     print(f"{'Бот':<32}{'Баланс':>11}{'Итог':>9}{'Сделок':>8}{'Прибыльных':>12}{'Профит-ф.':>11}{'Просадка':>10}")
     for group, flag in (("основные", False), ("контрольные", True)):
-        print(f"— {group} —")
-        for b in [x for x in s["bots"] if x["control"] == flag]:
+        group_bots = [x for x in s["bots"] if x["control"] == flag]
+        if group_bots:
+            print(f"— {group} —")
+        for b in group_bots:
             wr = "—" if b["winrate"] is None else f"{b['winrate']:.0f}%"
             pf = "—" if b["profit_factor"] is None else f"{b['profit_factor']:.2f}"
             print(f"{b['title']:<32}{b['equity']:>10.2f}${b['pnl_pct']:>+8.1f}%{b['trades']:>8}{wr:>12}{pf:>11}{b['max_dd']:>9.1f}%")
@@ -101,6 +105,8 @@ def main():
     ap.add_argument("--fresh", action="store_true", help="скачать историю заново")
     ap.add_argument("--serve", action="store_true", help="после прогона открыть страницу с результатами")
     ap.add_argument("--port", type=int, default=8001, help="порт страницы бэктеста (по умолчанию 8001)")
+    ap.add_argument("--bots", default="", help="только эти боты через запятую, например: pump_short_v2,pump_short. "
+                                               "Ярлык --bots pumps = обе версии шортиста пампов")
     a = ap.parse_args()
     days = max(1, min(90, a.days))
     from core.bybit import BybitClient
@@ -110,7 +116,14 @@ def main():
     except Exception as e:
         print(f"Bybit не отвечает: {e}\nЕсли сервер не видит Bybit — впиши прокси в .env (SIM_PROXY=...).")
         sys.exit(1)
-    engine, client = run(live, days, a.fresh)
+    names = {x.strip() for x in a.bots.split(",") if x.strip()}
+    if "pumps" in names:
+        names = (names - {"pumps"}) | {"pump_short", "pump_short_v2"}
+    unknown = names - {b.name for b in ALL_BOTS}
+    if unknown:
+        print("Нет таких ботов:", ", ".join(unknown), "\nЕсть:", ", ".join(b.name for b in ALL_BOTS))
+        sys.exit(1)
+    engine, client = run(live, days, a.fresh, bots=names or None)
     print_results(engine, days)
     report = build_report(engine, days)
     name = f"data/backtest_report_{time.strftime('%Y-%m-%d')}_{days}d.md"

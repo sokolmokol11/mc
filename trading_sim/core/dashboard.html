@@ -322,6 +322,7 @@ function openItem(id) {
 }
 
 function rangeLines(d, lines) {
+  if (d && d._target) lines.push([d._target, "#22c55e", "цель", 2]);
   if (d && d._range_lo) { lines.push([d._range_lo, "#22c55e", "дно боковика", 2]); lines.push([d._range_hi, "#64748b", "верх боковика", 2]); }
 }
 

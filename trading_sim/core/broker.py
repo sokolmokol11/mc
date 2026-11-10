@@ -48,6 +48,7 @@ class Account:
         self.cash = config.START_BALANCE
         self.positions = {}
         self.on_close = None   # движок подставляет функцию, которая пишет выход в журнал решений
+        self._last_px = {}     # цена на прошлой проверке — чтобы понять, пересекла ли цена уровень стопа
 
     def _slip(self, symbol):
         return config.SLIPPAGE_MAJOR if symbol in config.MAJORS else config.SLIPPAGE_ALT
@@ -80,6 +81,7 @@ class Account:
                        interval=interval, details=details or {}, fees=fee, first_stop=stop, first_tp=tp,
                        market=market, fee_rate=fee_rate, extra=extra or {})
         self.positions[key] = pos
+        self._last_px[symbol] = price
         arrow = ("🟢 СПОТ-ПОКУПКА" if market == "spot" else "🟢 ЛОНГ") if side == "long" else "🔴 ШОРТ"
         self.log(f"[{self.label}] {arrow} {symbol} залог ${usd:.0f} × {lev:g} = ${notional:.0f} "
                  f"по {fill:.6g} — {reason}")
@@ -130,24 +132,39 @@ class Account:
             p.funding += amt
 
     def check_exits(self, price_fn, now):
-        """Ликвидация, стоп-лосс, тейк-профит, лимит времени. Проверяется каждые TICK_SECONDS."""
+        """Ликвидация, стоп-лосс, тейк-профит, лимит времени. Проверяется каждые TICK_SECONDS.
+
+        Стоп и тейк на бирже — это заявки, которые стоят на уровне. Если цена между проверками ПРОШЛА через уровень,
+        заявка исполняется на уровне (плюс проскальзывание), а не по цене, до которой цена успела улететь.
+        Если цена перепрыгнула уровень гэпом (уже на прошлой проверке была за ним) — исполнение по текущей цене."""
+        seen = {}
         for key, p in list(self.positions.items()):
             px = price_fn(p.symbol)
             if px is None:
                 continue
-            reason = None
-            if p.margin + p.pnl(px) <= MAINTENANCE * p.qty * px:
-                reason = f"ЛИКВИДАЦИЯ (плечо {p.lev:g}x)"
-            elif p.stop is not None and ((p.side == "long" and px <= p.stop) or (p.side == "short" and px >= p.stop)):
-                reason = "стоп-лосс"
-            elif p.tp is not None and ((p.side == "long" and px >= p.tp) or (p.side == "short" and px <= p.tp)):
-                reason = "тейк-профит"
+            seen[p.symbol] = px
+            last = self._last_px.get(p.symbol)
+            up = p.side == "short"            # в какую сторону цена идёт против позиции
+            hits = []
+            liq = p.liq_price()
+            if (up and px >= liq) or (not up and px <= liq):
+                hits.append((liq, f"ЛИКВИДАЦИЯ (плечо {p.lev:g}x)"))
+            if p.stop is not None and ((up and px >= p.stop) or (not up and px <= p.stop)):
+                hits.append((p.stop, "стоп-лосс"))
+            if hits:
+                # первым срабатывает уровень, ближайший к прошлой цене (через него цена прошла раньше)
+                level, reason = (min if up else max)(hits, key=lambda h: h[0])
+                crossed = last is not None and ((up and last < level) or (not up and last > level))
+                self.close(key, level if crossed else px, now, reason)
+                continue
+            if p.tp is not None and ((p.side == "long" and px >= p.tp) or (p.side == "short" and px <= p.tp)):
+                crossed = last is not None and ((p.side == "long" and last < p.tp) or (p.side == "short" and last > p.tp))
+                self.close(key, p.tp if crossed else px, now, "тейк-профит")
             elif p.max_hold and now - p.opened_at >= p.max_hold:
-                reason = "вышло время сделки"
+                self.close(key, px, now, "вышло время сделки")
             elif now - p.opened_at >= config.MAX_HOLD_DAYS * 86400:
-                reason = "сделка дольше месяца"
-            if reason:
-                self.close(key, px, now, reason)
+                self.close(key, px, now, "сделка дольше месяца")
+        self._last_px.update(seen)
 
     # ---------- сохранение ----------
     def to_dict(self):

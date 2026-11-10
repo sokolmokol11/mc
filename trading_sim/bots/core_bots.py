@@ -23,7 +23,7 @@ def money(x):
 # =====================================================================================
 class PumpShort(Bot):
     name = "pump_short"
-    title = "Шортист пампов"
+    title = "Шортист пампов v1"
     timeframe = "15 мин, весь рынок"
     chart_interval = "15"
     overlays = ["avwap", "rsi", "oi"]
@@ -141,7 +141,7 @@ class PumpShort(Bot):
                     "reason": f"признаков выдоха {len(have)} из 4 (нужно 3). Есть: {', '.join(have) or '—'}. "
                               f"Нет: {', '.join(miss)}"}
         stop = peak * 1.03
-        dist = stop / c[-1] - 1
+        dist = stop / (ctx.market.price(s) or c[-1]) - 1
         if dist > self.MAX_STOP:
             return {**res, "code": "far", "reason": "стоп слишком далеко (больше 25% от цены)"}
         return {**res, "ok": True, "stop": stop, "code": "ok",
