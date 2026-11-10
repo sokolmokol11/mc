@@ -17,16 +17,18 @@ SUPPORTED = {"15": 1, "30": 2, "60": 4, "120": 8, "240": 16}   # во сколь
 
 
 # ------------------------------------------------------------------ загрузка
-def download(live, days, log, cache_dir="data/history", fresh=False):
-    """Скачать историю за days дней. Кэш живёт 12 часов — повторный запуск не качает заново."""
+def download(live, days, log, cache_dir="data/history", fresh=False, until=None):
+    """Скачать историю за days дней (до даты until, мс; по умолчанию — до сейчас).
+    Кэш живёт 12 часов — повторный запуск не качает заново."""
     os.makedirs(cache_dir, exist_ok=True)
-    path = os.path.join(cache_dir, f"history_{days}d.pkl")
+    tag = "" if until is None else time.strftime("_until%Y%m%d", time.gmtime(until / 1000))
+    path = os.path.join(cache_dir, f"history_{days}d{tag}.pkl")
     if not fresh and os.path.exists(path) and time.time() - os.path.getmtime(path) < 12 * 3600:
         log(f"Беру историю из кэша ({path}). Чтобы скачать заново — добавь --fresh")
         with open(path, "rb") as f:
             return pickle.load(f)
 
-    end = int(time.time() * 1000) // M15 * M15
+    end = int(until if until is not None else time.time() * 1000) // M15 * M15
     start = end - days * DAY
     warm = start - 4 * DAY
     log(f"Скачиваю список фьючерсов…")
@@ -36,7 +38,7 @@ def download(live, days, log, cache_dir="data/history", fresh=False):
     daily, keep = {}, []
     for n, s in enumerate(sorted(launch), 1):
         try:
-            rows = live.klines(s, "D", min(1000, days + 160))
+            rows = live.klines(s, "D", min(1000, days + 160), end=end)
         except Exception as e:
             log(f"  {s}: пропуск ({e})")
             continue

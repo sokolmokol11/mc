@@ -5,7 +5,8 @@
     python3.11 backtest.py --days 90       # последние 90 дней (до 90)
     python3.11 backtest.py --serve         # после прогона открыть страницу с результатами на порту 8001
     python3.11 backtest.py --fresh         # скачать историю заново (иначе берётся кэш, если ему меньше 12 часов)
-    python3.11 backtest.py --bots pumps    # только шортисты пампов (v1 и v2) — быстрее
+    python3.11 backtest.py --bots pumps    # только шортисты пампов (v1, v2, v2.1) — быстрее
+    python3.11 backtest.py --days 90 --until 2026-08-12 --bots pumps   # другой отрезок прошлого
 
 Результаты: страница (с --serve), файл отчёта data/backtest_report_*.md и база data/backtest.db.
 Живой симулятор при этом продолжает работать — бэктест его не трогает.
@@ -46,8 +47,9 @@ def log(msg):
     print(time.strftime("%H:%M:%S"), msg, flush=True)
 
 
-def run(live, days=30, fresh=False, db_path="data/backtest.db", cache_dir="data/history", quiet_progress=False, bots=None):
-    data = download(live, days, log, cache_dir, fresh)
+def run(live, days=30, fresh=False, db_path="data/backtest.db", cache_dir="data/history", quiet_progress=False, bots=None,
+        until=None):
+    data = download(live, days, log, cache_dir, fresh, until)
     start, end = data["start"], data["end"]
     clock = [start / 1000]
     client = BacktestClient(data, live, lambda: clock[0])
@@ -106,7 +108,9 @@ def main():
     ap.add_argument("--serve", action="store_true", help="после прогона открыть страницу с результатами")
     ap.add_argument("--port", type=int, default=8001, help="порт страницы бэктеста (по умолчанию 8001)")
     ap.add_argument("--bots", default="", help="только эти боты через запятую, например: pump_short_v2,pump_short. "
-                                               "Ярлык --bots pumps = обе версии шортиста пампов")
+                                               "Ярлык --bots pumps = все версии шортиста пампов")
+    ap.add_argument("--until", default="", help="закончить период этой датой ГГГГ-ММ-ДД (проверка на другом отрезке "
+                                                "прошлого), например --until 2026-08-12")
     a = ap.parse_args()
     days = max(1, min(90, a.days))
     from core.bybit import BybitClient
@@ -118,15 +122,24 @@ def main():
         sys.exit(1)
     names = {x.strip() for x in a.bots.split(",") if x.strip()}
     if "pumps" in names:
-        names = (names - {"pumps"}) | {"pump_short", "pump_short_v2"}
+        names = (names - {"pumps"}) | {"pump_short", "pump_short_v2", "pump_short_v21"}
     unknown = names - {b.name for b in ALL_BOTS}
     if unknown:
         print("Нет таких ботов:", ", ".join(unknown), "\nЕсть:", ", ".join(b.name for b in ALL_BOTS))
         sys.exit(1)
-    engine, client = run(live, days, a.fresh, bots=names or None)
+    until = None
+    if a.until:
+        import calendar
+        until = calendar.timegm(time.strptime(a.until, "%Y-%m-%d")) * 1000
+    engine, client = run(live, days, a.fresh, bots=names or None, until=until)
     print_results(engine, days)
     report = build_report(engine, days)
-    name = f"data/backtest_report_{time.strftime('%Y-%m-%d')}_{days}d.md"
+    from core.missed import section
+    missed = section(engine, client)
+    if missed:
+        report += "\n" + missed
+        print("\n" + missed)
+    name = f"data/backtest_report_{a.until or time.strftime('%Y-%m-%d')}_{days}d.md"
     with open(name, "w", encoding="utf-8") as f:
         f.write(report)
     print(f"\nОтчёт для разбора с Claude: {os.path.abspath(name)}")
