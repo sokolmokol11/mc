@@ -1,0 +1,11 @@
+# Секреты — никогда не загружать на GitHub
+config.ini
+*.session
+*.session-journal
+# Рабочие файлы
+cache.json
+results/
+stage1/
+*.log
+my_subs.txt
+my_private.txt
